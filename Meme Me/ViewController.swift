@@ -23,8 +23,12 @@ class ViewController: UIViewController, UIImagePickerControllerDelegate, UINavig
     @IBOutlet weak var bottomTextField: UITextField!
     @IBOutlet weak var toolbar: UIToolbar!
     @IBOutlet weak var shareButton: UIBarButtonItem!
+    @IBOutlet weak var topToolBar: UIToolbar!
     
     let textDelegate = MemeMeTextFieldDelegate()
+    var keyboardHeight: CGFloat = 0.0
+    var viewShifted: Bool = false
+    var meme: Meme? = nil
     
     let memeTextAttributes = [
         NSStrokeColorAttributeName: UIColor.blackColor(),
@@ -61,6 +65,17 @@ class ViewController: UIViewController, UIImagePickerControllerDelegate, UINavig
         super.viewWillAppear(animated)
         cameraButton.enabled = UIImagePickerController.isSourceTypeAvailable(UIImagePickerControllerSourceType.Camera)
         
+        if self.meme != nil {
+            self.imagePickerView!.image = meme!.image
+            self.topTextField.text = meme!.top
+            self.bottomTextField.text = meme!.bottom
+            self.topTextField.userInteractionEnabled = false
+            self.bottomTextField.userInteractionEnabled = false
+            self.toolbar.hidden = true
+            self.topToolBar.hidden = true
+        }
+        
+        self.viewShifted = false
         // Subscribe to the keyboard notifications, to allow the view to raise when necessary
         self.subscribeToKeyboardNotifications()
     }
@@ -105,23 +120,40 @@ class ViewController: UIViewController, UIImagePickerControllerDelegate, UINavig
     }
     
     func keyboardWillShow(notification: NSNotification) {
-        self.view.frame.origin.y -= getKeyboardHeight(notification)
+        self.view.frame.origin.y -= self.keyboardHeight
+        if self.keyboardHeight == 0.0 {
+            self.viewShifted = true
+        }
     }
     
     func keyboardWillHide(notification: NSNotification) {
-        self.view.frame.origin.y += getKeyboardHeight(notification)
+        self.view.frame.origin.y += self.keyboardHeight
+        self.viewShifted = false
+    }
+    
+    func keyboardHeight(notification: NSNotification) {
+        self.keyboardHeight = getKeyboardHeight(notification)
+        if self.viewShifted {
+            self.view.frame.origin.y -= self.keyboardHeight
+        }
     }
     
     func subscribeToKeyboardNotifications() {
-        NSNotificationCenter.defaultCenter().addObserver(self, selector: #selector(ViewController.keyboardWillShow(_:)), name: UIKeyboardWillShowNotification, object: nil)
+        NSNotificationCenter.defaultCenter().addObserver(self, selector: #selector(ViewController.keyboardHeight(_:)), name: UIKeyboardWillShowNotification, object: nil)
         
-        NSNotificationCenter.defaultCenter().addObserver(self, selector: #selector(ViewController.keyboardWillHide(_:)), name: UIKeyboardWillHideNotification, object: nil)
+        NSNotificationCenter.defaultCenter().addObserver(self, selector: #selector(ViewController.keyboardWillShow(_:)), name: UITextFieldTextDidBeginEditingNotification, object: bottomTextField)
+        
+        //NSNotificationCenter.defaultCenter().addObserver(self, selector: #selector(ViewController.keyboardWillHide(_:)), name: UIKeyboardWillHideNotification, object: nil)
+        NSNotificationCenter.defaultCenter().addObserver(self, selector: #selector(ViewController.keyboardWillHide(_:)), name: UITextFieldTextDidEndEditingNotification, object: bottomTextField)
     }
     
     func unsubscribeFromKeyboardNotifications() {
         NSNotificationCenter.defaultCenter().removeObserver(self, name: UIKeyboardWillShowNotification, object: nil)
         
-        NSNotificationCenter.defaultCenter().removeObserver(self, name: UIKeyboardWillHideNotification, object: nil)
+        NSNotificationCenter.defaultCenter().removeObserver(self, name: UITextFieldTextDidBeginEditingNotification, object: bottomTextField)
+        
+        //NSNotificationCenter.defaultCenter().removeObserver(self, name: UIKeyboardWillHideNotification, object: nil)
+        NSNotificationCenter.defaultCenter().removeObserver(self, name: UITextFieldTextDidEndEditingNotification, object: bottomTextField)
     }
     
     @IBAction func Share(sender: AnyObject) {
@@ -134,7 +166,18 @@ class ViewController: UIViewController, UIImagePickerControllerDelegate, UINavig
             // Create the meme
             _ = Meme(top: self.topTextField.text!, bottom: self.bottomTextField.text!, image: self.imagePickerView.image!, memedImage: memedImage)
             self.dismissViewControllerAnimated(true, completion: nil)
+            self.save()
         }
+    }
+    
+    // Create a meme object and add it to the memes array
+    func save() {
+        
+        // Update the meme
+        let meme = Meme(top: topTextField.text!, bottom: bottomTextField.text!, image: imagePickerView.image!, memedImage: generateMemeImage() )
+        
+        // Add it to the memees array on the Application Delegate
+        (UIApplication.sharedApplication().delegate as! AppDelegate).memes.append(meme)
     }
     
     func generateMemeImage() -> UIImage {
